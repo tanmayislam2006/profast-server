@@ -2,7 +2,7 @@ const express = require("express");
 require("dotenv").config();
 const cors = require("cors");
 const port = process.env.PORT || 5000;
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -32,12 +32,23 @@ async function run() {
         const parcels = await profastPercelCollection.find(query).toArray();
         res.send(parcels);
       } catch (error) {
-        res
-          .status(500)
-          .send({
-            error: "Failed to retrieve parcels",
-            details: error.message,
-          });
+        res.status(500).send({
+          error: "Failed to retrieve parcels",
+          details: error.message,
+        });
+      }
+    });
+    // to view a single parcel details
+    app.get("/parcels/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const parcel = await profastPercelCollection.findOne({ _id: new ObjectId(id) });
+        res.send(parcel);
+      } catch (error) {
+        res.status(500).send({
+          error: "Failed to retrieve parcel",
+          details: error.message,
+        });
       }
     });
     app.post("/addParcel", async (req, res) => {
@@ -49,6 +60,19 @@ async function run() {
         res
           .status(500)
           .send({ error: "Failed to add parcel", details: error.message });
+      }
+    });
+    app.delete("/deleteParcel/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const result = await profastPercelCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        res.send(result);
+      } catch (error) {
+        res
+          .status(500)
+          .send({ error: "Failed to delete parcel", details: error.message });
       }
     });
     console.log(
