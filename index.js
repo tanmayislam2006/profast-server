@@ -23,6 +23,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     const profastPercelCollection = client.db("profast").collection("parcel");
+    const paymentCollection = client.db("profast").collection("payment");
     app.get("/parcels", async (req, res) => {
       try {
         const email = req.query.email;
@@ -54,7 +55,18 @@ async function run() {
         });
       }
     });
-
+    // send percel
+    app.post("/addParcel", async (req, res) => {
+      try {
+        const parcel = req.body;
+        const result = await profastPercelCollection.insertOne(parcel);
+        res.send(result);
+      } catch (error) {
+        res
+          .status(500)
+          .send({ error: "Failed to add parcel", details: error.message });
+      }
+    });
     // Create Payment Intent API
     app.post("/create-payment-intent", async (req, res) => {
       try {
@@ -72,18 +84,19 @@ async function run() {
         res.status(500).send({ error: error.message });
       }
     });
-
-    app.post("/addParcel", async (req, res) => {
+    app.post("/payments", async (req, res) => {
       try {
-        const parcel = req.body;
-        const result = await profastPercelCollection.insertOne(parcel);
+        const paymentInfo = req.body;
+        const result = await paymentCollection.insertOne(paymentInfo);
         res.send(result);
       } catch (error) {
         res
           .status(500)
-          .send({ error: "Failed to add parcel", details: error.message });
+          .send({ error: "Faild to add payment", details: error.message });
       }
     });
+    // set payment history
+
     app.patch("/parcel/:id", async (req, res) => {
       const id = req.params.id;
       const updateData = req.body;
