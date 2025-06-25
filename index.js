@@ -6,6 +6,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 app.use(cors());
 app.use(express.json());
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.kn8r7rw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 app.get("/", (req, res) => {
@@ -42,7 +43,9 @@ async function run() {
     app.get("/parcels/:id", async (req, res) => {
       try {
         const id = req.params.id;
-        const parcel = await profastPercelCollection.findOne({ _id: new ObjectId(id) });
+        const parcel = await profastPercelCollection.findOne({
+          _id: new ObjectId(id),
+        });
         res.send(parcel);
       } catch (error) {
         res.status(500).send({
@@ -51,6 +54,25 @@ async function run() {
         });
       }
     });
+
+    // Create Payment Intent API
+    app.post("/create-payment-intent", async (req, res) => {
+      try {
+        const { amount } = req.body;
+        // Create Stripe Payment Intent
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount, // amount in cents or paisa
+          currency: "usd", // use "usd" or "bdt" if available
+          payment_method_types: ["card"],
+        });
+        // Send clientSecret to frontend
+        res.send({ clientSecret: paymentIntent.client_secret });
+      } catch (error) {
+        console.error("Error creating payment intent:", error.message);
+        res.status(500).send({ error: error.message });
+      }
+    });
+
     app.post("/addParcel", async (req, res) => {
       try {
         const parcel = req.body;
@@ -62,6 +84,16 @@ async function run() {
           .send({ error: "Failed to add parcel", details: error.message });
       }
     });
+    app.patch("/parcel/:id", async (req, res) => {
+      const id = req.params.id;
+      const updateData = req.body;
+      const filter = { _id: new ObjectId(id) };
+      const result = await profastPercelCollection.updateOne(filter, {
+        $set: updateData,
+      });
+      res.send(result);
+    });
+
     app.delete("/deleteParcel/:id", async (req, res) => {
       try {
         const id = req.params.id;
