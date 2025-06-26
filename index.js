@@ -24,6 +24,7 @@ async function run() {
   try {
     const profastPercelCollection = client.db("profast").collection("parcel");
     const paymentCollection = client.db("profast").collection("payment");
+    // get user all send parcel data
     app.get("/parcels", async (req, res) => {
       try {
         const email = req.query.email;
@@ -51,6 +52,23 @@ async function run() {
       } catch (error) {
         res.status(500).send({
           error: "Failed to retrieve parcel",
+          details: error.message,
+        });
+      }
+    });
+    // get user all paymnet history
+    app.get("/myPayments", async (req, res) => {
+      try {
+        const email = req.query.email;
+        let query = {};
+        if (email) {
+          query = { email: email };
+        }
+        const payments = await paymentCollection.find(query).toArray();
+        res.send(payments);
+      } catch (error) {
+        res.status(500).send({
+          error: "Failed to retrieve payments",
           details: error.message,
         });
       }
@@ -84,6 +102,7 @@ async function run() {
         res.status(500).send({ error: error.message });
       }
     });
+    // to store the payment details for sow payment hsitory
     app.post("/payments", async (req, res) => {
       try {
         const paymentInfo = req.body;
