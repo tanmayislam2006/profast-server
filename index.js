@@ -25,6 +25,7 @@ async function run() {
     const proFastUserCollection = client.db("profast").collection("users");
     const profastPercelCollection = client.db("profast").collection("parcel");
     const paymentCollection = client.db("profast").collection("payment");
+    const proFastRiderCollection = client.db("profast").collection("riders");
     // get  information
     app.get("/user/:email", async (req, res) => {
       try {
@@ -88,20 +89,18 @@ async function run() {
       }
     });
     // get all rider application
-    app.get("/riderApplication", async (req, res) => {
+    app.get("/riders", async (req, res) => {
       const status = req.query.status;
       const query = {};
       if (status === "approved") {
-        query.status = "approved";
+        query.rider_status = "approved";
       } else if (status === "pending") {
-        query.status = "pending";
+        query.rider_status = "pending";
       } else if (status === "rejected") {
-        query.status = "rejected";
+        query.rider_status = "rejected";
       }
       try {
-        const applications = await profastPercelCollection
-          .find(query)
-          .toArray();
+        const applications = await proFastRiderCollection.find(query).toArray();
         res.send(applications);
       } catch (error) {
         res.status(500).send({
@@ -152,10 +151,10 @@ async function run() {
       }
     });
     // to add rider application
-    app.post("/riderApplication", async (req, res) => {
+    app.post("/riders", async (req, res) => {
       try {
         const riderData = req.body;
-        const result = await profastPercelCollection.insertOne(riderData);
+        const result = await proFastRiderCollection.insertOne(riderData);
         res.send(result);
       } catch (error) {
         res.status(500).send({
@@ -184,6 +183,19 @@ async function run() {
       const result = await profastPercelCollection.updateOne(filter, {
         $set: updateData,
       });
+      res.send(result);
+    });
+    // update the rider status
+    app.patch("/updateRiderStatus/:id", async (req, res) => {
+      const id = req.params.id;
+      const status = req.query.status;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          rider_status: status,
+        },
+      };
+      const result = await proFastRiderCollection.updateOne(query, updateDoc);
       res.send(result);
     });
     // update the user role and the last logint time
