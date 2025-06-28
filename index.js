@@ -22,8 +22,22 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
+    const proFastUserCollection = client.db("profast").collection("users");
     const profastPercelCollection = client.db("profast").collection("parcel");
     const paymentCollection = client.db("profast").collection("payment");
+    // get  information
+    app.get("/user/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const user = await proFastUserCollection.findOne({ email: email });
+        res.send(user);
+      } catch (error) {
+        res.status(500).send({
+          error: "Failed to retrieve user information",
+          details: error.message,
+        });
+      }
+    });
     // get user all send parcel data
     app.get("/parcels", async (req, res) => {
       try {
@@ -73,7 +87,30 @@ async function run() {
         });
       }
     });
-    // send percel
+    // get all rider application
+    app.get("/riderApplication", async (req, res) => {
+      const status = req.query.status;
+      const query = {};
+      if (status === "approved") {
+        query.status = "approved";
+      } else if (status === "pending") {
+        query.status = "pending";
+      } else if (status === "rejected") {
+        query.status = "rejected";
+      }
+      try {
+        const applications = await profastPercelCollection
+          .find(query)
+          .toArray();
+        res.send(applications);
+      } catch (error) {
+        res.status(500).send({
+          error: "Failed to retrieve rider applications",
+          details: error.message,
+        });
+      }
+    });
+    // send parcel
     app.post("/addParcel", async (req, res) => {
       try {
         const parcel = req.body;
@@ -114,8 +151,32 @@ async function run() {
           .send({ error: "Faild to add payment", details: error.message });
       }
     });
-    // set payment history
-
+    // to add rider application
+    app.post("/riderApplication", async (req, res) => {
+      try {
+        const riderData = req.body;
+        const result = await profastPercelCollection.insertOne(riderData);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({
+          error: "Failed to add rider application",
+          details: error.message,
+        });
+      }
+    });
+    // resigster the user
+    app.post("/register", async (req, res) => {
+      const userInformation = req.body;
+      const { email } = userInformation;
+      const query = { email: email };
+      const existingUser = await proFastUserCollection.findOne(query);
+      if (existingUser) {
+        return res.status(200).send({ message: "User already exists" });
+      }
+      const result = await proFastUserCollection.insertOne(userInformation);
+      res.send(result);
+    });
+    // update the payment status for the parcel
     app.patch("/parcel/:id", async (req, res) => {
       const id = req.params.id;
       const updateData = req.body;
@@ -125,7 +186,19 @@ async function run() {
       });
       res.send(result);
     });
-
+    // update the user role and the last logint time
+    app.patch("/login", async (req, res) => {
+      const { email, lastSignInTime } = req.body;
+      console.log(email, lastSignInTime);
+      const filter = { email: email };
+      const updateDoc = {
+        $set: {
+          lastSignInTime: lastSignInTime,
+        },
+      };
+      const result = await proFastUserCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
     app.delete("/deleteParcel/:id", async (req, res) => {
       try {
         const id = req.params.id;
