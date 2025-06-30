@@ -37,18 +37,40 @@ const verifyYourSecretToken = (req, res, next) => {
       console.log(err);
       return res.status(401).send({ message: "unauthorized access" });
     }
-    next();
     req.decoded = decode;
+    next();
   });
 };
+
 async function run() {
   try {
     const proFastUserCollection = client.db("profast").collection("users");
     const profastPercelCollection = client.db("profast").collection("parcel");
     const paymentCollection = client.db("profast").collection("payment");
     const proFastRiderCollection = client.db("profast").collection("riders");
+    // addmin verify middleware
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const user = await proFastUserCollection.findOne({email});
+      if (!user || user.role !== "admin") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+    // get all user info for admin
+    app.get("/user", verifyYourSecretToken, verifyAdmin, async (req, res) => {
+      try {
+        const user = await proFastUserCollection.find().toArray();
+        res.send(user);
+      } catch (error) {
+        res.status(500).send({
+          error: "Failed to retrieve user information",
+          details: error.message,
+        });
+      }
+    });
     // get  information
-    app.get("/user/:email", async (req, res) => {
+    app.get("/user/:email", verifyYourSecretToken, async (req, res) => {
       try {
         const email = req.params.email;
         const user = await proFastUserCollection.findOne({ email: email });
@@ -76,7 +98,7 @@ async function run() {
       res.send({ message: "your cooike is set " });
     });
     // get user all send parcel data
-    app.get("/parcels", async (req, res) => {
+    app.get("/parcels", verifyYourSecretToken, async (req, res) => {
       try {
         const email = req.query.email;
         let query = {};
@@ -93,7 +115,7 @@ async function run() {
       }
     });
     // to view a single parcel details
-    app.get("/parcels/:id", async (req, res) => {
+    app.get("/parcels/:id", verifyYourSecretToken, async (req, res) => {
       try {
         const id = req.params.id;
         const parcel = await profastPercelCollection.findOne({
@@ -125,7 +147,7 @@ async function run() {
       }
     });
     // get all rider application
-    app.get("/riders", async (req, res) => {
+    app.get("/riders", verifyYourSecretToken, async (req, res) => {
       const status = req.query.status;
       const query = {};
       if (status === "approved") {
@@ -146,7 +168,7 @@ async function run() {
       }
     });
     // send parcel
-    app.post("/addParcel", async (req, res) => {
+    app.post("/addParcel", verifyYourSecretToken, async (req, res) => {
       try {
         const parcel = req.body;
         const result = await profastPercelCollection.insertOne(parcel);
@@ -175,7 +197,7 @@ async function run() {
       }
     });
     // to store the payment details for sow payment hsitory
-    app.post("/payments", async (req, res) => {
+    app.post("/payments", verifyYourSecretToken, async (req, res) => {
       try {
         const paymentInfo = req.body;
         const result = await paymentCollection.insertOne(paymentInfo);
@@ -187,7 +209,7 @@ async function run() {
       }
     });
     // to add rider application
-    app.post("/riders", async (req, res) => {
+    app.post("/riders", verifyYourSecretToken, async (req, res) => {
       try {
         const riderData = req.body;
         const result = await proFastRiderCollection.insertOne(riderData);
@@ -212,7 +234,7 @@ async function run() {
       res.send(result);
     });
     // update the payment status for the parcel
-    app.patch("/parcel/:id", async (req, res) => {
+    app.patch("/parcel/:id", verifyYourSecretToken, async (req, res) => {
       const id = req.params.id;
       const updateData = req.body;
       const filter = { _id: new ObjectId(id) };
@@ -222,18 +244,22 @@ async function run() {
       res.send(result);
     });
     // update the rider status
-    app.patch("/updateRiderStatus/:id", async (req, res) => {
-      const id = req.params.id;
-      const status = req.query.status;
-      const query = { _id: new ObjectId(id) };
-      const updateDoc = {
-        $set: {
-          rider_status: status,
-        },
-      };
-      const result = await proFastRiderCollection.updateOne(query, updateDoc);
-      res.send(result);
-    });
+    app.patch(
+      "/updateRiderStatus/:id",
+      verifyYourSecretToken,
+      async (req, res) => {
+        const id = req.params.id;
+        const status = req.query.status;
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            rider_status: status,
+          },
+        };
+        const result = await proFastRiderCollection.updateOne(query, updateDoc);
+        res.send(result);
+      }
+    );
     // update the user role and the last logint time
     app.patch("/login", async (req, res) => {
       const { email, lastSignInTime } = req.body;
@@ -247,7 +273,7 @@ async function run() {
       const result = await proFastUserCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
-    app.delete("/deleteParcel/:id", async (req, res) => {
+    app.delete("/deleteParcel/:id", verifyYourSecretToken, async (req, res) => {
       try {
         const id = req.params.id;
         const result = await profastPercelCollection.deleteOne({
