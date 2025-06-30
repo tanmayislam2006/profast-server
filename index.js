@@ -4,10 +4,15 @@ const cors = require("cors");
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "https://simple-auth-2f984.web.app"],
+    credentials:true
+  })
+);
 app.use(express.json());
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-
+const jwt = require("jsonwebtoken");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.kn8r7rw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 app.get("/", (req, res) => {
   res.send("Hello server");
@@ -38,6 +43,21 @@ async function run() {
           details: error.message,
         });
       }
+    });
+    // cerate a json wbtoken
+    app.post("/jsonwebtoken", async (req, res) => {
+      // register user with the user emial or uid that is store on db
+      const userEmail = req.body;
+      const token = jwt.sign(userEmail, process.env.JWT_SECRET, {
+        expiresIn: "8h",
+      });
+      res.cookie("YourSecretToken", token, {
+        httpOnly: true,
+        // change it when live link
+        secure: false,
+        sameSite: "none",
+      });
+      res.send({ message: "your cooike is set " });
     });
     // get user all send parcel data
     app.get("/parcels", async (req, res) => {
