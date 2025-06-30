@@ -4,15 +4,17 @@ const cors = require("cors");
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 app.use(
   cors({
     origin: ["http://localhost:5173", "https://simple-auth-2f984.web.app"],
-    credentials:true
+    credentials: true,
   })
 );
+app.use(cookieParser());
 app.use(express.json());
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const jwt = require("jsonwebtoken");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.kn8r7rw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 app.get("/", (req, res) => {
   res.send("Hello server");
@@ -25,6 +27,20 @@ const client = new MongoClient(uri, {
   },
 });
 
+const verifyYourSecretToken = (req, res, next) => {
+  const getTokenFromCooike = req.cookies.YourSecretToken;
+  if (!getTokenFromCooike) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+  jwt.verify(getTokenFromCooike, process.env.JWT_SECRET, (err, decode) => {
+    if (err) {
+      console.log(err);
+      return res.status(401).send({ message: "unauthorized access" });
+    }
+    next();
+    req.decoded = decode;
+  });
+};
 async function run() {
   try {
     const proFastUserCollection = client.db("profast").collection("users");
@@ -55,7 +71,7 @@ async function run() {
         httpOnly: true,
         // change it when live link
         secure: false,
-        sameSite: "none",
+        sameSite: "lax",
       });
       res.send({ message: "your cooike is set " });
     });
@@ -92,7 +108,7 @@ async function run() {
       }
     });
     // get user all paymnet history
-    app.get("/myPayments", async (req, res) => {
+    app.get("/myPayments", verifyYourSecretToken, async (req, res) => {
       try {
         const email = req.query.email;
         let query = {};
