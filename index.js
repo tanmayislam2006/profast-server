@@ -51,7 +51,7 @@ async function run() {
     // addmin verify middleware
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded.email;
-      const user = await proFastUserCollection.findOne({email});
+      const user = await proFastUserCollection.findOne({ email });
       if (!user || user.role !== "admin") {
         return res.status(403).send({ message: "forbidden access" });
       }
@@ -92,8 +92,8 @@ async function run() {
       res.cookie("YourSecretToken", token, {
         httpOnly: true,
         // change it when live link
-        secure: false,
-        sameSite: "lax",
+        secure: true,
+        sameSite: "none",
       });
       res.send({ message: "your cooike is set " });
     });
@@ -273,6 +273,34 @@ async function run() {
       const result = await proFastUserCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
+    // make a user admin to user or user to admin
+    app.patch("/user/:id/role", async (req, res) => {
+      try {
+        const userId = req.params.id;
+        const { role } = req.body;
+        // ✅ Validate incoming data
+        if (!role || (role !== "admin" && role !== "user" && role !=="rider")) {
+          return res.status(400).json({ error: "Invalid role" });
+        }
+
+        // ✅ Convert string ID to ObjectId
+        const filter = { _id: new ObjectId(userId) };
+        const updateDoc = { $set: { role } };
+
+        // ✅ Update the user in the database
+        const result = await proFastUserCollection.updateOne(filter, updateDoc);
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ error: "User not found" });
+        }
+
+        res.send(result);
+      } catch (error) {
+        console.error("Error updating user role:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    });
+    // delete userpercel
     app.delete("/deleteParcel/:id", verifyYourSecretToken, async (req, res) => {
       try {
         const id = req.params.id;
