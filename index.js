@@ -167,6 +167,29 @@ async function run() {
         });
       }
     });
+    // get all percel which is paid but not collected
+    // GET /admin/assignable-parcels
+app.get("/admin/assignableParcels", verifyYourSecretToken,verifyAdmin, async (req, res) => {
+  try {
+
+    // 2️⃣ Query for paid & not collected
+    const query = {
+      payment_status: "paid",
+      delivery_status: "not_collected",
+    };
+
+    const parcels = await profastPercelCollection
+      .find(query)
+      .sort({ creation_date: 1 })
+      .toArray();
+
+    res.send(parcels);
+  } catch (error) {
+    console.error("Error fetching assignable parcels:", error);
+    res.status(500).send({ error: "Failed to retrieve parcels" });
+  }
+});
+
     // send parcel
     app.post("/addParcel", verifyYourSecretToken, async (req, res) => {
       try {
