@@ -169,26 +169,58 @@ async function run() {
     });
     // get all percel which is paid but not collected
     // GET /admin/assignable-parcels
-app.get("/admin/assignableParcels", verifyYourSecretToken,verifyAdmin, async (req, res) => {
-  try {
+    app.get(
+      "/admin/assignableParcels",
+      verifyYourSecretToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          // 2️⃣ Query for paid & not collected
+          const query = {
+            payment_status: "paid",
+            delivery_status: "not_collected",
+          };
 
-    // 2️⃣ Query for paid & not collected
-    const query = {
-      payment_status: "paid",
-      delivery_status: "not_collected",
-    };
+          const parcels = await profastPercelCollection
+            .find(query)
+            .sort({ creation_date: 1 })
+            .toArray();
 
-    const parcels = await profastPercelCollection
-      .find(query)
-      .sort({ creation_date: 1 })
-      .toArray();
+          res.send(parcels);
+        } catch (error) {
+          console.error("Error fetching assignable parcels:", error);
+          res.status(500).send({ error: "Failed to retrieve parcels" });
+        }
+      }
+    );
+    // get all availavle rider who is available in sender distirct
+    app.get(
+      "/admin/riders/available",
+      verifyYourSecretToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const { sender_center } = req.query;
+          if (!sender_center) {
+            return res
+              .status(400)
+              .send({ error: "Missing sender_center in query" });
+          }
 
-    res.send(parcels);
-  } catch (error) {
-    console.error("Error fetching assignable parcels:", error);
-    res.status(500).send({ error: "Failed to retrieve parcels" });
-  }
-});
+          const query = {
+            warehouse: sender_center,
+            rider_status: "approved",
+          };
+
+          const riders = await proFastRiderCollection.find(query).toArray();
+
+          res.send(riders);
+        } catch (error) {
+          console.error("Error getting available riders:", error);
+          res.status(500).send({ error: "Failed to get riders" });
+        }
+      }
+    );
 
     // send parcel
     app.post("/addParcel", verifyYourSecretToken, async (req, res) => {
@@ -302,7 +334,10 @@ app.get("/admin/assignableParcels", verifyYourSecretToken,verifyAdmin, async (re
         const userId = req.params.id;
         const { role } = req.body;
         // ✅ Validate incoming data
-        if (!role || (role !== "admin" && role !== "user" && role !=="rider")) {
+        if (
+          !role ||
+          (role !== "admin" && role !== "user" && role !== "rider")
+        ) {
           return res.status(400).json({ error: "Invalid role" });
         }
 
@@ -323,6 +358,50 @@ app.get("/admin/assignableParcels", verifyYourSecretToken,verifyAdmin, async (re
         res.status(500).json({ error: "Internal server error" });
       }
     });
+    // update the user delevery status and collection
+    // PATCH: Assign rider to parcel (Admin only)
+    app.patch(
+      "/admin/parcels/:parcelId/assign",
+      verifyYourSecretToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          // 1. Check admin role
+
+          const parcelId = req.params.parcelId;
+          const { riderId, riderName } = req.body;
+          if (!riderId || !riderName) {
+            return res
+              .status(400)
+              .send({ error: "Missing riderId or riderName" });
+          }
+
+          // 2. Update parcel with rider info
+          const result = await profastPercelCollection.updateOne(
+            { _id: new ObjectId(parcelId) },
+            {
+              $set: {
+                assigned_rider_id: riderId,
+                assigned_rider_name: riderName,
+                delivery_status: "assigned_to_rider",
+                assigned_date: new Date(),
+              },
+            }
+          );
+
+          if (result.modifiedCount === 0) {
+            return res
+              .status(404)
+              .send({ error: "Parcel not found or already assigned" });
+          }
+          res.send(result);
+        } catch (error) {
+          console.error("Error assigning rider:", error);
+          res.status(500).send({ error: "Internal Server Error" });
+        }
+      }
+    );
+
     // delete userpercel
     app.delete("/deleteParcel/:id", verifyYourSecretToken, async (req, res) => {
       try {
