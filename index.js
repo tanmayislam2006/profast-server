@@ -431,6 +431,32 @@ async function run() {
         }
       }
     );
+    // update delivery status form rider
+    app.patch("/parcels/:id/status",verifyYourSecretToken,verifyRider, async (req, res) => {
+      const parcelId = req.params.id;
+      const { status } = req.body;
+      const updatedDoc = {
+        delivery_status: status,
+      };
+
+      if (status === "in_transit") {
+        updatedDoc.picked_at = new Date().toISOString();
+      } else if (status === "delivered") {
+        updatedDoc.delivered_at = new Date().toISOString();
+      }
+
+      try {
+        const result = await profastPercelCollection.updateOne(
+          { _id: new ObjectId(parcelId) },
+          {
+            $set: updatedDoc,
+          }
+        );
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to update status" });
+      }
+    });
 
     // delete userpercel
     app.delete("/deleteParcel/:id", verifyYourSecretToken, async (req, res) => {
