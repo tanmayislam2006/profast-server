@@ -493,7 +493,32 @@ async function run() {
         }
       }
     );
+    // update the percel cash out status from rider
+    app.patch(
+      "/completedPercel/:id/cashOut",
+      verifyYourSecretToken,
+      verifyRider,
+      async (req, res) => {
+        const parcelId = req.params.id;
 
+        try {
+          const filter = { _id: new ObjectId(parcelId) };
+          const updateDoc = {
+            $set: {
+              cashout_status: "cashed_out",
+              cashed_out_at: new Date(),
+            },
+          };
+          const result = await profastPercelCollection.updateOne(
+            filter,
+            updateDoc
+          );
+          res.send(result);
+        } catch (error) {
+          res.status(500).send({ message: "Failed to update status" });
+        }
+      }
+    );
     // delete userpercel
     app.delete("/deleteParcel/:id", verifyYourSecretToken, async (req, res) => {
       try {
