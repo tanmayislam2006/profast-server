@@ -48,6 +48,7 @@ async function run() {
     const profastPercelCollection = client.db("profast").collection("parcel");
     const paymentCollection = client.db("profast").collection("payment");
     const proFastRiderCollection = client.db("profast").collection("riders");
+    const proFastPercelTraking = client.db("profast").collection("tracking");
     // addmin verify middleware
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded.email;
@@ -57,6 +58,7 @@ async function run() {
       }
       next();
     };
+    // rider verify
     const verifyRider = async (req, res, next) => {
       const email = req.decoded.email;
       const user = await proFastUserCollection.findOne({ email });
@@ -275,11 +277,46 @@ async function run() {
         res.send(result);
       }
     );
+    // find the user percel eith tracking id
+    // Assuming Express + MongoDB setup
+    app.get(
+      "/tracking/:trackingId",
+      verifyYourSecretToken,
+      async (req, res) => {
+        try {
+          const trackingId = req.params.trackingId;
+          const result = await proFastPercelTraking.findOne({
+            tracking_id: trackingId,
+          });
+
+          if (!result) {
+            return res.status(404).send({ message: "Tracking ID not found" });
+          }
+
+          res.send(result);
+        } catch (error) {
+          console.error(error);
+          res.status(500).send({ message: "Failed to fetch tracking data" });
+        }
+      }
+    );
+
     // send parcel
     app.post("/addParcel", verifyYourSecretToken, async (req, res) => {
       try {
         const parcel = req.body;
         const result = await profastPercelCollection.insertOne(parcel);
+        // Add initial tracking log
+        await proFastPercelTraking.insertOne({
+          tracking_id: parcel.tracking_id,
+          logs: [
+            {
+              status: "created",
+              details: `Parcel created by ${parcel.sender_name}`,
+              date: new Date(),
+            },
+          ],
+        });
         res.send(result);
       } catch (error) {
         res
@@ -309,6 +346,18 @@ async function run() {
       try {
         const paymentInfo = req.body;
         const result = await paymentCollection.insertOne(paymentInfo);
+        await proFastPercelTraking.updateOne(
+          { tracking_id: paymentInfo.traking_id },
+          {
+            $push: {
+              logs: {
+                status: "paid",
+                details: "Payment received",
+                date: new Date(),
+              },
+            },
+          }
+        );
         res.send(result);
       } catch (error) {
         res
@@ -455,6 +504,22 @@ async function run() {
               .status(404)
               .send({ error: "Parcel not found or already assigned" });
           }
+          const findThePercel = await profastPercelCollection.findOne({
+            _id: new ObjectId(parcelId),
+          });
+          await proFastPercelTraking.updateOne(
+            { tracking_id: findThePercel.tracking_id },
+            {
+              $push: {
+                logs: {
+                  status: "ridder assign",
+                  details: "Riddes Assign",
+                  date: new Date(),
+                },
+              },
+            }
+          );
+
           res.send(result);
         } catch (error) {
           console.error("Error assigning rider:", error);
@@ -476,8 +541,38 @@ async function run() {
 
         if (status === "in_transit") {
           updatedDoc.picked_at = new Date().toISOString();
+          const findThePercel = await profastPercelCollection.findOne({
+            _id: new ObjectId(parcelId),
+          });
+          await proFastPercelTraking.updateOne(
+            { tracking_id: findThePercel.tracking_id },
+            {
+              $push: {
+                logs: {
+                  status: "in transit",
+                  details: "Your Percel On The way",
+                  date: new Date(),
+                },
+              },
+            }
+          );
         } else if (status === "delivered") {
           updatedDoc.delivered_at = new Date().toISOString();
+          const findThePercel = await profastPercelCollection.findOne({
+            _id: new ObjectId(parcelId),
+          });
+          await proFastPercelTraking.updateOne(
+            { tracking_id: findThePercel.tracking_id },
+            {
+              $push: {
+                logs: {
+                  status: "delivired",
+                  details: "Percel Is delivaried",
+                  date: new Date(),
+                },
+              },
+            }
+          );
         }
 
         try {
