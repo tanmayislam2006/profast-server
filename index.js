@@ -252,6 +252,29 @@ async function run() {
         res.send(result);
       }
     );
+    // get rider compled delivery for a rider
+    app.get(
+      "/rider/completedPercel/:riderEmail",
+      verifyYourSecretToken,
+      verifyRider,
+      async (req, res) => {
+        const riderEmail = req.params.riderEmail;
+        if (!riderEmail) {
+          return res.send({ message: "rider email is reuired" });
+        }
+        const filter = {
+          assigned_rider_email: riderEmail,
+          delivery_status: { $in: ["delivered", "service_center_delivered"] },
+        };
+        const option = {
+          sort: { assigned_date: -1 },
+        };
+        const result = await profastPercelCollection
+          .find(filter, option)
+          .toArray();
+        res.send(result);
+      }
+    );
     // send parcel
     app.post("/addParcel", verifyYourSecretToken, async (req, res) => {
       try {
@@ -359,35 +382,43 @@ async function run() {
       res.send(result);
     });
     // make a user admin to user or user to admin
-    app.patch("/user/:id/role", async (req, res) => {
-      try {
-        const userId = req.params.id;
-        const { role } = req.body;
-        // ✅ Validate incoming data
-        if (
-          !role ||
-          (role !== "admin" && role !== "user" && role !== "rider")
-        ) {
-          return res.status(400).json({ error: "Invalid role" });
+    app.patch(
+      "/user/:id/role",
+      verifyYourSecretToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const userId = req.params.id;
+          const { role } = req.body;
+          // ✅ Validate incoming data
+          if (
+            !role ||
+            (role !== "admin" && role !== "user" && role !== "rider")
+          ) {
+            return res.status(400).json({ error: "Invalid role" });
+          }
+
+          // ✅ Convert string ID to ObjectId
+          const filter = { _id: new ObjectId(userId) };
+          const updateDoc = { $set: { role } };
+
+          // ✅ Update the user in the database
+          const result = await proFastUserCollection.updateOne(
+            filter,
+            updateDoc
+          );
+
+          if (result.matchedCount === 0) {
+            return res.status(404).json({ error: "User not found" });
+          }
+
+          res.send(result);
+        } catch (error) {
+          console.error("Error updating user role:", error);
+          res.status(500).json({ error: "Internal server error" });
         }
-
-        // ✅ Convert string ID to ObjectId
-        const filter = { _id: new ObjectId(userId) };
-        const updateDoc = { $set: { role } };
-
-        // ✅ Update the user in the database
-        const result = await proFastUserCollection.updateOne(filter, updateDoc);
-
-        if (result.matchedCount === 0) {
-          return res.status(404).json({ error: "User not found" });
-        }
-
-        res.send(result);
-      } catch (error) {
-        console.error("Error updating user role:", error);
-        res.status(500).json({ error: "Internal server error" });
       }
-    });
+    );
     // update the user delevery status and collection
     // PATCH: Assign rider to parcel (Admin only)
     app.patch(
@@ -432,31 +463,36 @@ async function run() {
       }
     );
     // update delivery status form rider
-    app.patch("/parcels/:id/status",verifyYourSecretToken,verifyRider, async (req, res) => {
-      const parcelId = req.params.id;
-      const { status } = req.body;
-      const updatedDoc = {
-        delivery_status: status,
-      };
+    app.patch(
+      "/parcels/:id/status",
+      verifyYourSecretToken,
+      verifyRider,
+      async (req, res) => {
+        const parcelId = req.params.id;
+        const { status } = req.body;
+        const updatedDoc = {
+          delivery_status: status,
+        };
 
-      if (status === "in_transit") {
-        updatedDoc.picked_at = new Date().toISOString();
-      } else if (status === "delivered") {
-        updatedDoc.delivered_at = new Date().toISOString();
-      }
+        if (status === "in_transit") {
+          updatedDoc.picked_at = new Date().toISOString();
+        } else if (status === "delivered") {
+          updatedDoc.delivered_at = new Date().toISOString();
+        }
 
-      try {
-        const result = await profastPercelCollection.updateOne(
-          { _id: new ObjectId(parcelId) },
-          {
-            $set: updatedDoc,
-          }
-        );
-        res.send(result);
-      } catch (error) {
-        res.status(500).send({ message: "Failed to update status" });
+        try {
+          const result = await profastPercelCollection.updateOne(
+            { _id: new ObjectId(parcelId) },
+            {
+              $set: updatedDoc,
+            }
+          );
+          res.send(result);
+        } catch (error) {
+          res.status(500).send({ message: "Failed to update status" });
+        }
       }
-    });
+    );
 
     // delete userpercel
     app.delete("/deleteParcel/:id", verifyYourSecretToken, async (req, res) => {
