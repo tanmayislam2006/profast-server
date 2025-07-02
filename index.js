@@ -57,6 +57,14 @@ async function run() {
       }
       next();
     };
+    const verifyRider = async (req, res, next) => {
+      const email = req.decoded.email;
+      const user = await proFastUserCollection.findOne({ email });
+      if (!user || user.role !== "rider") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
     // get all user info for admin
     app.get("/user", verifyYourSecretToken, verifyAdmin, async (req, res) => {
       try {
@@ -221,7 +229,29 @@ async function run() {
         }
       }
     );
-
+    // // GET: Get pending delivery tasks for a rider
+    app.get(
+      "/rider/percels/:riderEmail",
+      verifyYourSecretToken,
+      verifyRider,
+      async (req, res) => {
+        const riderEmail = req.params.riderEmail;
+        if (!riderEmail) {
+          return res.send({ message: "rider email is reuired" });
+        }
+        const filter = {
+          assigned_rider_email: riderEmail,
+          delivery_status: { $in: ["assigned_to_rider", "in_transit"] },
+        };
+        const option = {
+          sort: { assigned_date: -1 },
+        };
+        const result = await profastPercelCollection
+          .find(filter, option)
+          .toArray();
+        res.send(result);
+      }
+    );
     // send parcel
     app.post("/addParcel", verifyYourSecretToken, async (req, res) => {
       try {
@@ -369,8 +399,8 @@ async function run() {
           // 1. Check admin role
 
           const parcelId = req.params.parcelId;
-          const { riderId, riderName } = req.body;
-          if (!riderId || !riderName) {
+          const { riderEmail, riderName } = req.body;
+          if (!riderEmail || !riderName) {
             return res
               .status(400)
               .send({ error: "Missing riderId or riderName" });
@@ -381,7 +411,7 @@ async function run() {
             { _id: new ObjectId(parcelId) },
             {
               $set: {
-                assigned_rider_id: riderId,
+                assigned_rider_email: riderEmail,
                 assigned_rider_name: riderName,
                 delivery_status: "assigned_to_rider",
                 assigned_date: new Date(),
