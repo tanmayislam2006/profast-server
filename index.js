@@ -301,7 +301,7 @@ async function run() {
       }
     );
     // get user all status unog mongoDB agrigate
-    app.get("/dashboard/user",verifyYourSecretToken, async (req, res) => {
+    app.get("/dashboard/user", verifyYourSecretToken, async (req, res) => {
       try {
         const email = req.query.email;
         if (!email) {
@@ -362,6 +362,160 @@ async function run() {
           .send({ error: "Internal Server Error", details: error.message });
       }
     });
+    // make admin dashboard
+    /**
+     * Admin Dashboard Aggregated Stats
+     * - Must be called by an authenticated, verified admin
+     */
+    app.get(
+      "/dashboard/admin",
+      verifyYourSecretToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          // ----------- 1️⃣ Define the date ranges -------------
+          // Start of today (00:00)
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          // Start of this week (Sunday)
+          const startOfWeek = new Date();
+          startOfWeek.setDate(today.getDate() - today.getDay());
+          startOfWeek.setHours(0, 0, 0, 0);
+
+          // Start of this month (1st of month)
+          const startOfMonth = new Date(
+            today.getFullYear(),
+            today.getMonth(),
+            1
+          );
+
+          // Start of this year (January 1st)
+          const startOfYear = new Date(today.getFullYear(), 0, 1);
+
+          // ----------- 2️⃣ MongoDB Aggregation Pipeline -------------
+          const pipeline = [
+            {
+              $facet: {
+                // Total parcels in system
+                totalParcels: [{ $count: "count" }],
+
+                // Total parcels with payment status "paid"
+                totalPaidParcels: [
+                  { $match: { payment_status: "paid" } },
+                  { $count: "count" },
+                ],
+
+                // Sum of cost of all paid parcels = total revenue
+                totalEarnings: [
+                  { $match: { payment_status: "paid" } },
+                  { $group: { _id: null, total: { $sum: "$cost" } } },
+                ],
+
+                // How many parcels are unassigned (no rider yet)
+                unassignedParcels: [
+                  { $match: { assigned_rider_email: { $exists: false } } },
+                  { $count: "count" },
+                ],
+
+                // How many are in transit
+                inTransit: [
+                  { $match: { delivery_status: "in_transit" } },
+                  { $count: "count" },
+                ],
+
+                // How many have been delivered
+                delivered: [
+                  { $match: { delivery_status: "delivered" } },
+                  { $count: "count" },
+                ],
+
+                // Last 5 parcels for recent activity table
+                recentParcels: [
+                  { $sort: { creation_date: -1 } },
+                  { $limit: 5 },
+                ],
+
+                // Earnings *today*
+                todayEarnings: [
+                  {
+                    $match: {
+                      payment_status: "paid",
+                      assigned_date: { $gte: today },
+                    },
+                  },
+                  {
+                    $group: { _id: null, total: { $sum: "$cost" } },
+                  },
+                ],
+
+                // Earnings this *week*
+                weekEarnings: [
+                  {
+                    $match: {
+                      payment_status: "paid",
+                      assigned_date: { $gte: startOfWeek },
+                    },
+                  },
+                  {
+                    $group: { _id: null, total: { $sum: "$cost" } },
+                  },
+                ],
+
+                // Earnings this *month*
+                monthEarnings: [
+                  {
+                    $match: {
+                      payment_status: "paid",
+                      assigned_date: { $gte: startOfMonth },
+                    },
+                  },
+                  {
+                    $group: { _id: null, total: { $sum: "$cost" } },
+                  },
+                ],
+
+                // Earnings this *year*
+                yearEarnings: [
+                  {
+                    $match: {
+                      payment_status: "paid",
+                      assigned_date: { $gte: startOfYear },
+                    },
+                  },
+                  {
+                    $group: { _id: null, total: { $sum: "$cost" } },
+                  },
+                ],
+              },
+            },
+          ];
+
+          // ----------- 3️⃣ Run the aggregation -------------
+          const [result] = await profastPercelCollection
+            .aggregate(pipeline)
+            .toArray();
+
+          // ----------- 4️⃣ Format and send response -------------
+          res.send({
+            totalParcels: result.totalParcels[0]?.count || 0,
+            totalPaidParcels: result.totalPaidParcels[0]?.count || 0,
+            totalEarnings: result.totalEarnings[0]?.total || 0,
+            unassignedParcels: result.unassignedParcels[0]?.count || 0,
+            inTransit: result.inTransit[0]?.count || 0,
+            delivered: result.delivered[0]?.count || 0,
+            recentParcels: result.recentParcels || [],
+            todayEarnings: result.todayEarnings[0]?.total || 0,
+            weekEarnings: result.weekEarnings[0]?.total || 0,
+            monthEarnings: result.monthEarnings[0]?.total || 0,
+            yearEarnings: result.yearEarnings[0]?.total || 0,
+          });
+        } catch (err) {
+          console.error(err);
+          res.status(500).send({ error: "Server error" });
+        }
+      }
+    );
 
     // send parcel
     app.post("/addParcel", verifyYourSecretToken, async (req, res) => {
