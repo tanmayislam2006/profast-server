@@ -300,6 +300,68 @@ async function run() {
         }
       }
     );
+    // get user all status unog mongoDB agrigate
+    app.get("/dashboard/user",verifyYourSecretToken, async (req, res) => {
+      try {
+        const email = req.query.email;
+        if (!email) {
+          return res.status(400).send({ error: "Email is required" });
+        }
+
+        const pipeline = [
+          // 1️⃣ Match only parcels created by this user
+          { $match: { created_by: email } },
+
+          // 2️⃣ Break into multiple parallel pipelines
+          {
+            $facet: {
+              // Total parcels sent by this user
+              totalParcels: [{ $count: "count" }],
+
+              // Sum of cost of *paid* parcels only
+              totalSpent: [
+                { $match: { payment_status: "paid" } },
+                { $group: { _id: null, total: { $sum: "$cost" } } },
+              ],
+
+              // How many delivered
+              delivered: [
+                { $match: { delivery_status: "delivered" } },
+                { $count: "count" },
+              ],
+
+              // How many pending (anything not delivered)
+              pending: [
+                { $match: { delivery_status: { $ne: "delivered" } } },
+                { $count: "count" },
+              ],
+
+              // Latest 5 parcels for user dashboard
+              recentParcels: [{ $sort: { creation_date: -1 } }, { $limit: 5 }],
+            },
+          },
+        ];
+
+        // Run the aggregation
+        const [result] = await profastPercelCollection
+          .aggregate(pipeline)
+          .toArray();
+
+        // Respond with simplified data structure
+        res.send({
+          totalParcels: result.totalParcels[0]?.count || 0,
+          totalSpent: result.totalSpent[0]?.total || 0,
+          delivered: result.delivered[0]?.count || 0,
+          pending: result.pending[0]?.count || 0,
+          recentParcels: result.recentParcels || [],
+        });
+      } catch (error) {
+        console.error("Error in /user/dashboard:", error);
+        res
+          .status(500)
+          .send({ error: "Internal Server Error", details: error.message });
+      }
+    });
 
     // send parcel
     app.post("/addParcel", verifyYourSecretToken, async (req, res) => {
